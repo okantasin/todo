@@ -1,8 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAppData, genId } from '@/lib/storage';
 import type { Project, ChecklistItem, BugEntry } from '@/lib/types';
+
+function useAutoGrow(value: string) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    }
+  }, [value]);
+  return ref;
+}
 
 const PROJECT_COLORS = ['#9a7b4f', '#3498db', '#27ae60', '#e67e22', '#9b59b6', '#c0392b'];
 
@@ -72,12 +84,14 @@ function Checklist({ items, onChange }: { items: ChecklistItem[]; onChange: (ite
 }
 
 function TextArea({ value, onChange, placeholder, mono }: { value: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean }) {
+  const ref = useAutoGrow(value);
   return (
     <textarea
+      ref={ref}
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
-      rows={4}
+      rows={2}
       style={{
         width: '100%',
         border: '1px solid var(--border)',
@@ -88,7 +102,10 @@ function TextArea({ value, onChange, placeholder, mono }: { value: string; onCha
         lineHeight: 1.6,
         background: 'var(--bg)',
         color: 'var(--dark)',
-        resize: 'vertical',
+        resize: 'none',
+        overflow: 'hidden',
+        minHeight: 0,
+        boxSizing: 'border-box',
       }}
     />
   );

@@ -3,7 +3,7 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "LifeOS",
+  title: "Work Organization System",
   description: "Your personal life management system",
 };
 

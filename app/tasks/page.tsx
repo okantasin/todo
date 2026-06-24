@@ -1,9 +1,20 @@
 'use client';
 
-import { useState } from 'react';
-import { useAppData } from '@/lib/storage';
-import { genId, today, formatDate } from '@/lib/storage';
-import type { Task, Priority } from '@/lib/types';
+import { useState, useRef, useEffect } from 'react';
+import { useAppData, genId, today, formatDate } from '@/lib/storage';
+import type { Task, Priority, QAItem } from '@/lib/types';
+
+function useAutoGrow(value: string) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    }
+  }, [value]);
+  return ref;
+}
 
 const PRIORITY_COLORS: Record<Priority, string> = {
   low: '#27ae60',
@@ -17,6 +28,12 @@ const PRIORITY_LABELS: Record<Priority, string> = {
   medium: 'Orta',
   high: 'Yüksek',
   urgent: 'Acil',
+};
+
+const STATUS_LABELS: Record<Task['status'], string> = {
+  todo: 'Bekliyor',
+  'in-progress': 'Devam',
+  done: 'Tamamlandı',
 };
 
 function PriorityDot({ priority }: { priority: Priority }) {
@@ -34,10 +51,235 @@ function PriorityDot({ priority }: { priority: Priority }) {
   );
 }
 
+// ---------- Detail building blocks ----------
+
+function Section({ title, children, mono }: { title: string; children: React.ReactNode; mono?: boolean }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 20, marginBottom: 20 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: 0,
+          marginBottom: open ? 12 : 0,
+          width: '100%',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: 11, color: 'var(--muted)', transition: 'transform 0.15s', display: 'inline-block', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)' }}>{title}</span>
+      </button>
+      {open && <div style={{ fontFamily: mono ? 'var(--font-mono)' : undefined, fontSize: mono ? 13 : 14 }}>{children}</div>}
+    </div>
+  );
+}
+
+function TextArea({ value, onChange, placeholder, mono, rows = 2 }: { value: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean; rows?: number }) {
+  const ref = useAutoGrow(value);
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      style={{
+        width: '100%',
+        border: '1px solid var(--border)',
+        borderRadius: 6,
+        padding: '10px 12px',
+        fontSize: mono ? 12 : 13,
+        fontFamily: mono ? 'var(--font-mono)' : 'inherit',
+        lineHeight: 1.6,
+        background: 'var(--bg)',
+        color: 'var(--dark)',
+        resize: 'none',
+        overflow: 'hidden',
+        minHeight: 0,
+        boxSizing: 'border-box',
+      }}
+    />
+  );
+}
+
+function AutoTextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { value: string }) {
+  const ref = useAutoGrow(props.value);
+  return <textarea ref={ref} {...props} style={{ ...props.style, resize: 'none', overflow: 'hidden' }} />;
+}
+
+function ProblemSolutions({ items, onChange }: { items: QAItem[]; onChange: (items: QAItem[]) => void }) {
+  function add() {
+    onChange([...items, { id: genId(), question: '', answer: '' }]);
+  }
+  function update(id: string, patch: Partial<QAItem>) {
+    onChange(items.map(i => i.id === id ? { ...i, ...patch } : i));
+  }
+  function remove(id: string) {
+    onChange(items.filter(i => i.id !== id));
+  }
+  return (
+    <div>
+      {items.length === 0 && <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>Henüz soru-cevap yok.</p>}
+      {items.map((item, idx) => (
+        <div key={item.id} style={{ marginBottom: 14, padding: '12px 14px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>Q{idx + 1}</span>
+            <input
+              value={item.question}
+              onChange={e => update(item.id, { question: e.target.value })}
+              placeholder="Soru / problem..."
+              style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, fontWeight: 600, color: 'var(--dark)', outline: 'none' }}
+            />
+            <button onClick={() => remove(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 14, opacity: 0.5 }}>×</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', fontFamily: 'var(--font-mono)', marginTop: 8 }}>A{idx + 1}</span>
+            <AutoTextArea
+              value={item.answer}
+              onChange={e => update(item.id, { answer: e.target.value })}
+              placeholder="Cevap / çözüm..."
+              rows={2}
+              style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px', fontSize: 13, lineHeight: 1.6, background: 'var(--surface)', color: 'var(--dark)' }}
+            />
+          </div>
+        </div>
+      ))}
+      <button onClick={add} style={{ padding: '6px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>+ Soru-Cevap Ekle</button>
+    </div>
+  );
+}
+
+function TaskDetail({ task, projectTitle, onUpdate, onClose }: {
+  task: Task;
+  projectTitle?: string;
+  onUpdate: (t: Task) => void;
+  onClose: () => void;
+}) {
+  function set<K extends keyof Task>(key: K, val: Task[K]) {
+    onUpdate({ ...task, [key]: val });
+  }
+
+  return (
+    <div style={{ maxWidth: 860, margin: '0 auto', padding: '0 24px 60px' }}>
+      {/* Back */}
+      <button
+        onClick={onClose}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 13, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 4 }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Görevler
+      </button>
+
+      {/* Task header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, paddingBottom: 16, borderBottom: '2px solid var(--border)' }}>
+        <PriorityDot priority={task.priority} />
+        <input
+          value={task.title}
+          onChange={e => set('title', e.target.value)}
+          style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 26, fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--dark)', outline: 'none' }}
+          placeholder="Görev Başlığı"
+        />
+        <select
+          value={task.status}
+          onChange={e => set('status', e.target.value as Task['status'])}
+          style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'var(--bg)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+        >
+          {(Object.keys(STATUS_LABELS) as Task['status'][]).map(s => (
+            <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Meta row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 28 }}>
+        <select
+          value={task.priority}
+          onChange={e => set('priority', e.target.value as Priority)}
+          style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, background: 'var(--bg)', color: 'var(--dark)', cursor: 'pointer' }}
+        >
+          {(Object.keys(PRIORITY_LABELS) as Priority[]).map(p => (
+            <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>
+          ))}
+        </select>
+        <input
+          type="date"
+          value={task.dueDate ?? ''}
+          onChange={e => set('dueDate', e.target.value || undefined)}
+          style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, background: 'var(--bg)', color: 'var(--dark)' }}
+        />
+        {projectTitle && (
+          <span style={{ fontSize: 11, color: 'var(--muted)', background: 'var(--border)', padding: '4px 10px', borderRadius: 10 }}>{projectTitle}</span>
+        )}
+      </div>
+
+      {/* Description */}
+      <Section title="Açıklama">
+        <TextArea value={task.description ?? ''} onChange={v => set('description', v || undefined)} placeholder="Görevin kısa açıklaması..." rows={2} />
+      </Section>
+
+      <Section title="Design Decision">
+        <TextArea value={task.designDecision ?? ''} onChange={v => set('designDecision', v)} placeholder="Tasarım kararları, mimari seçimler ve gerekçeleri..." />
+      </Section>
+
+      <Section title="Backend Development">
+        <TextArea value={task.backendDev ?? ''} onChange={v => set('backendDev', v)} placeholder="API, servis, veri katmanı geliştirme notları..." />
+      </Section>
+
+      <Section title="Frontend Development">
+        <TextArea value={task.frontendDev ?? ''} onChange={v => set('frontendDev', v)} placeholder="UI bileşenleri, state, entegrasyon notları..." />
+      </Section>
+
+      <Section title="Configuration Development">
+        <TextArea value={task.configDev ?? ''} onChange={v => set('configDev', v)} placeholder="Env, feature flag, deployment ve config değişiklikleri..." />
+      </Section>
+
+      <Section title="JSON" mono>
+        <TextArea value={task.jsonSnippet ?? ''} onChange={v => set('jsonSnippet', v)} placeholder={'{\n  "key": "value"\n}'} mono rows={6} />
+      </Section>
+
+      <Section title="Problem & Solution">
+        <ProblemSolutions items={task.problemSolutions ?? []} onChange={items => set('problemSolutions', items)} />
+      </Section>
+
+      <Section title="Code Review" mono>
+        <TextArea value={task.codeReview ?? ''} onChange={v => set('codeReview', v)} placeholder="PR linki, review yorumları, talep edilen değişiklikler..." mono />
+      </Section>
+
+      <Section title="Notes">
+        <TextArea value={task.taskNotes ?? ''} onChange={v => set('taskNotes', v)} placeholder="Serbest notlar..." />
+      </Section>
+    </div>
+  );
+}
+
+// ---------- Detail completeness indicator ----------
+
+function detailCount(task: Task): number {
+  let n = 0;
+  if (task.designDecision?.trim()) n++;
+  if (task.backendDev?.trim()) n++;
+  if (task.frontendDev?.trim()) n++;
+  if (task.configDev?.trim()) n++;
+  if (task.jsonSnippet?.trim()) n++;
+  if ((task.problemSolutions ?? []).length) n++;
+  if (task.codeReview?.trim()) n++;
+  if (task.taskNotes?.trim()) n++;
+  return n;
+}
+
 export default function TasksPage() {
   const { data, updateData, loaded } = useAppData();
   const [filter, setFilter] = useState<'all' | 'todo' | 'in-progress' | 'done'>('all');
   const [showForm, setShowForm] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -48,6 +290,26 @@ export default function TasksPage() {
 
   if (!loaded) {
     return <div style={{ padding: 40, color: 'var(--muted)' }}>Yükleniyor...</div>;
+  }
+
+  const selectedTask = data.tasks.find(t => t.id === selectedId);
+
+  function updateTask(task: Task) {
+    updateData('tasks', prev => prev.map(t => t.id === task.id ? task : t));
+  }
+
+  if (selectedTask) {
+    const project = data.projects.find(p => p.id === selectedTask.projectId);
+    return (
+      <div style={{ padding: '32px 0' }}>
+        <TaskDetail
+          task={selectedTask}
+          projectTitle={project?.title}
+          onUpdate={updateTask}
+          onClose={() => setSelectedId(null)}
+        />
+      </div>
+    );
   }
 
   const tasks = data.tasks.filter(t => filter === 'all' ? true : t.status === filter);
@@ -67,6 +329,7 @@ export default function TasksPage() {
       dueDate: form.dueDate || undefined,
       createdAt: new Date().toISOString(),
       tags: [],
+      problemSolutions: [],
     };
     updateData('tasks', prev => [task, ...prev]);
     setForm({ title: '', description: '', priority: 'medium', dueDate: '', projectId: '' });
@@ -156,7 +419,7 @@ export default function TasksPage() {
               color: 'var(--dark)',
             }}
           />
-          <textarea
+          <AutoTextArea
             placeholder="Açıklama (isteğe bağlı)..."
             value={form.description}
             onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
@@ -167,7 +430,6 @@ export default function TasksPage() {
               background: 'transparent',
               fontSize: 13,
               color: 'var(--muted)',
-              resize: 'none',
               marginBottom: 12,
             }}
           />
@@ -256,9 +518,11 @@ export default function TasksPage() {
         {tasks.map(task => {
           const project = data.projects.find(p => p.id === task.projectId);
           const isOverdue = task.dueDate && task.dueDate < today() && task.status !== 'done';
+          const filled = detailCount(task);
           return (
             <div
               key={task.id}
+              onClick={() => setSelectedId(task.id)}
               style={{
                 display: 'flex',
                 alignItems: 'flex-start',
@@ -268,12 +532,15 @@ export default function TasksPage() {
                 border: '1px solid var(--border)',
                 borderRadius: 8,
                 opacity: task.status === 'done' ? 0.6 : 1,
-                transition: 'all 0.15s',
+                cursor: 'pointer',
+                transition: 'border-color 0.15s',
               }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
             >
               {/* Status toggle */}
               <button
-                onClick={() => toggleStatus(task)}
+                onClick={e => { e.stopPropagation(); toggleStatus(task); }}
                 title={task.status}
                 style={{
                   width: 18,
@@ -313,6 +580,11 @@ export default function TasksPage() {
                       {project.title}
                     </span>
                   )}
+                  {filled > 0 && (
+                    <span style={{ fontSize: 10, color: 'var(--accent)', border: '1px solid var(--accent)', padding: '1px 6px', borderRadius: 10, opacity: 0.8 }}>
+                      {filled} bölüm
+                    </span>
+                  )}
                 </div>
                 {task.description && (
                   <p style={{ margin: '4px 0 0 16px', fontSize: 12, color: 'var(--muted)' }}>{task.description}</p>
@@ -326,7 +598,7 @@ export default function TasksPage() {
 
               {/* Delete */}
               <button
-                onClick={() => deleteTask(task.id)}
+                onClick={e => { e.stopPropagation(); deleteTask(task.id); }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 4, opacity: 0.4, flexShrink: 0 }}
                 className="hover:opacity-100"
               >
