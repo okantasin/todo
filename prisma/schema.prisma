@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Tarih/createdAt alanları uygulamada ISO string olarak tutuluyor; bu yüzden
+// burada da String. İç içe diziler (tags, checklist, bugLog, blocks, Q&A) jsonb.
+
+model Task {
+  id               String  @id
+  title            String
+  description      String?
+  priority         String
+  status           String
+  projectId        String?
+  dueDate          String?
+  createdAt        String
+  completedAt      String?
+  tags             Json    @default("[]")
+  designDecision   String?
+  backendDev       String?
+  frontendDev      String?
+  configDev        String?
+  jsonSnippet      String?
+  problemSolutions Json    @default("[]")
+  codeReview       String?
+  taskNotes        String?
+
+  @@map("tasks")
+}
+
+model Project {
+  id                      String  @id
+  title                   String
+  description             String?
+  status                  String
+  createdAt               String
+  color                   String
+  overview                String?
+  summary                 String?
+  context                 String?
+  technicalAnalysis       String?
+  implementationChecklist Json    @default("[]")
+  openQuestions           String?
+  testScenarios           String?
+  localTesting            String?
+  databaseNotes           String?
+  bugLog                  Json    @default("[]")
+  commitPR                String?
+  closureChecklist        Json    @default("[]")
+
+  @@map("projects")
+}
+
+model Note {
+  id        String @id
+  title     String
+  blocks    Json   @default("[]")
+  createdAt String
+  updatedAt String
+  tags      Json   @default("[]")
+
+  @@map("notes")
+}
+
+model PlannerEvent {
+  id        String  @id
+  title     String
+  date      String
+  startTime String
+  endTime   String
+  color     String?
+  taskId    String?
+  notes     String?
+
+  @@map("planner_events")
+}

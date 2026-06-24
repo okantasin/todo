@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { AppData } from './types';
 
 export function genId(): string {
@@ -54,8 +54,49 @@ const INITIAL_DATA: AppData = {
   plannerEvents: [],
 };
 
+// Verileri sunucudaki data/lifeos.json dosyasında tutar (bkz. app/api/data/route.ts).
+// Okuma: mount'ta GET. Yazma: her değişiklikte debounce'lu PUT (dosyayı dövmemek için).
 export function useAppData() {
-  const [data, setData, loaded] = useLocalStorage<AppData>('lifeos-data', INITIAL_DATA);
+  const [data, setDataState] = useState<AppData>(INITIAL_DATA);
+  const [loaded, setLoaded] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/data')
+      .then(r => r.json())
+      .then((d: AppData) => {
+        if (!cancelled) setDataState({ ...INITIAL_DATA, ...d });
+      })
+      .catch(() => {
+        // ağ hatası: boş veriyle devam et
+      })
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const persist = useCallback((next: AppData) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      fetch('/api/data', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
+      }).catch(() => {
+        // yazma hatası sessizce yutuluyor; bir sonraki değişiklikte tekrar denenecek
+      });
+    }, 400);
+  }, []);
+
+  const setData = useCallback((val: AppData | ((prev: AppData) => AppData)) => {
+    setDataState(prev => {
+      const next = typeof val === 'function' ? (val as (p: AppData) => AppData)(prev) : val;
+      persist(next);
+      return next;
+    });
+  }, [persist]);
 
   const updateData = useCallback(<K extends keyof AppData>(key: K, updater: (prev: AppData[K]) => AppData[K]) => {
     setData(prev => ({
