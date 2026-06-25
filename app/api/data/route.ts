@@ -5,7 +5,9 @@ import type { AppData, Task, Project, Note, PlannerEvent } from '@/lib/types';
 
 // Tüm uygulama durumu Postgres'te 4 tabloda tutulur (bkz. prisma/schema.prisma).
 // GET: tabloları okuyup AppData olarak birleştirir.
-// PUT: gelen tüm durumu tek transaction'da senkronlar (temizle + yaz).
+// PUT: gelen durumu UPSERT ile senkronlar. Var olan kayıt YERİNDE güncellenir
+//      (silinip yeniden yazılmaz); yalnızca gelen veride artık olmayan kayıt
+//      (yani kullanıcı UI'dan sildiyse) silinir.
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
@@ -40,18 +42,53 @@ export async function PUT(req: NextRequest) {
   }
 
   try {
-    // Küçük bir kişisel veri kümesi: tüm durumu temizleyip yeniden yazmak en basit
-    // ve tutarlı yöntem. Transaction sayesinde ya hepsi yazılır ya hiçbiri.
-    await prisma.$transaction([
-      prisma.task.deleteMany(),
-      prisma.project.deleteMany(),
-      prisma.note.deleteMany(),
-      prisma.plannerEvent.deleteMany(),
-      prisma.task.createMany({ data: body.tasks.map(toTaskRow) as unknown as Prisma.TaskCreateManyInput[] }),
-      prisma.project.createMany({ data: body.projects.map(toProjectRow) as unknown as Prisma.ProjectCreateManyInput[] }),
-      prisma.note.createMany({ data: body.notes.map(toNoteRow) as unknown as Prisma.NoteCreateManyInput[] }),
-      prisma.plannerEvent.createMany({ data: body.plannerEvents.map(toPlannerRow) as unknown as Prisma.PlannerEventCreateManyInput[] }),
-    ]);
+    const taskRows = body.tasks.map(toTaskRow);
+    const projectRows = body.projects.map(toProjectRow);
+    const noteRows = body.notes.map(toNoteRow);
+    const plannerRows = body.plannerEvents.map(toPlannerRow);
+
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+
+    // 1) Yalnızca artık gelmeyen (UI'dan silinmiş) kayıtları sil.
+    //    notIn: [] → Prisma bunu "hepsi" olarak yorumlar; yani liste boşsa
+    //    (kullanıcı son kaydı da sildiyse) o tablodaki tüm satırlar silinir.
+    ops.push(prisma.task.deleteMany({ where: { id: { notIn: taskRows.map(t => t.id) } } }));
+    ops.push(prisma.project.deleteMany({ where: { id: { notIn: projectRows.map(p => p.id) } } }));
+    ops.push(prisma.note.deleteMany({ where: { id: { notIn: noteRows.map(n => n.id) } } }));
+    ops.push(prisma.plannerEvent.deleteMany({ where: { id: { notIn: plannerRows.map(e => e.id) } } }));
+
+    // 2) Gelen her kaydı UPSERT et: varsa güncelle, yoksa oluştur (silme yok).
+    for (const row of taskRows) {
+      ops.push(prisma.task.upsert({
+        where: { id: row.id },
+        create: row as unknown as Prisma.TaskCreateInput,
+        update: row as unknown as Prisma.TaskUpdateInput,
+      }));
+    }
+    for (const row of projectRows) {
+      ops.push(prisma.project.upsert({
+        where: { id: row.id },
+        create: row as unknown as Prisma.ProjectCreateInput,
+        update: row as unknown as Prisma.ProjectUpdateInput,
+      }));
+    }
+    for (const row of noteRows) {
+      ops.push(prisma.note.upsert({
+        where: { id: row.id },
+        create: row as unknown as Prisma.NoteCreateInput,
+        update: row as unknown as Prisma.NoteUpdateInput,
+      }));
+    }
+    for (const row of plannerRows) {
+      ops.push(prisma.plannerEvent.upsert({
+        where: { id: row.id },
+        create: row as unknown as Prisma.PlannerEventCreateInput,
+        update: row as unknown as Prisma.PlannerEventUpdateInput,
+      }));
+    }
+
+    // Hepsi tek transaction: ya tamamı uygulanır ya hiçbiri.
+    await prisma.$transaction(ops);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

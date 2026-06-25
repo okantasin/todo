@@ -8,14 +8,22 @@ import type { Note } from '@/lib/types';
 export default function NotesPage() {
   const { data, updateData, loaded } = useAppData();
   const [search, setSearch] = useState('');
+  const [activeTag, setActiveTag] = useState<string | null>(null);
 
   if (!loaded) return <div style={{ padding: 40, color: 'var(--muted)' }}>Yükleniyor...</div>;
 
-  const notes = data.notes.filter(n =>
-    search === '' ||
-    n.title.toLowerCase().includes(search.toLowerCase()) ||
-    n.blocks.some(b => b.content.toLowerCase().includes(search.toLowerCase()))
-  );
+  const allTags = Array.from(new Set(data.notes.flatMap(n => n.tags))).sort();
+
+  const q = search.toLowerCase();
+  const notes = data.notes.filter(n => {
+    const matchesSearch =
+      search === '' ||
+      n.title.toLowerCase().includes(q) ||
+      n.tags.some(t => t.toLowerCase().includes(q)) ||
+      n.blocks.some(b => b.content.toLowerCase().includes(q));
+    const matchesTag = !activeTag || n.tags.includes(activeTag);
+    return matchesSearch && matchesTag;
+  });
 
   function createNote() {
     const note: Note = {
@@ -86,6 +94,23 @@ export default function NotesPage() {
         />
       </div>
 
+      {/* Tag filter */}
+      {allTags.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
+          <button
+            onClick={() => setActiveTag(null)}
+            style={{ fontSize: 11, padding: '3px 10px', borderRadius: 12, border: 'none', cursor: 'pointer', background: activeTag === null ? 'var(--accent)' : 'var(--surface)', color: activeTag === null ? '#fff' : 'var(--muted)' }}
+          >Tümü</button>
+          {allTags.map(tag => (
+            <button
+              key={tag}
+              onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+              style={{ fontSize: 11, padding: '3px 10px', borderRadius: 12, border: '1px solid var(--border)', cursor: 'pointer', background: activeTag === tag ? 'var(--accent)' : 'var(--surface)', color: activeTag === tag ? '#fff' : 'var(--muted)' }}
+            >#{tag}</button>
+          ))}
+        </div>
+      )}
+
       {/* Notes grid */}
       {notes.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--muted)', fontSize: 13 }}>
@@ -117,13 +142,22 @@ export default function NotesPage() {
                 onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
                 onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
               >
+                {note.cover && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 6, background: note.cover, borderRadius: '10px 10px 0 0' }} />}
                 <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {note.icon && <span style={{ fontSize: 16 }}>{note.icon}</span>}
                     {note.title || 'Başlıksız'}
                   </h3>
                   <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                     {getExcerpt(note)}
                   </p>
+                  {note.tags.length > 0 && (
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
+                      {note.tags.slice(0, 3).map(t => (
+                        <span key={t} style={{ fontSize: 10, color: 'var(--muted)', background: 'var(--border)', padding: '1px 6px', borderRadius: 8 }}>#{t}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}>

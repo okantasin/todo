@@ -170,7 +170,7 @@ function TaskDetail({ task, projectTitle, onUpdate, onClose }: {
       {/* Back */}
       <button
         onClick={onClose}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 13, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 4 }}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 20, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 4 }}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <polyline points="15 18 9 12 15 6"/>

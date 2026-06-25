@@ -57,12 +57,14 @@ model Project {
 }
 
 model Note {
-  id        String @id
+  id        String  @id
   title     String
-  blocks    Json   @default("[]")
+  icon      String?
+  cover     String?
+  blocks    Json    @default("[]")
   createdAt String
   updatedAt String
-  tags      Json   @default("[]")
+  tags      Json    @default("[]")
 
   @@map("notes")
 }

@@ -1,6 +1,18 @@
 export type Priority = 'low' | 'medium' | 'high' | 'urgent';
 export type TaskStatus = 'todo' | 'in-progress' | 'done';
-export type BlockType = 'paragraph' | 'heading1' | 'heading2' | 'heading3' | 'bullet' | 'todo' | 'quote' | 'code';
+export type BlockType =
+  | 'paragraph'
+  | 'heading1'
+  | 'heading2'
+  | 'heading3'
+  | 'bullet'
+  | 'numbered'
+  | 'todo'
+  | 'quote'
+  | 'code'
+  | 'divider'
+  | 'callout'
+  | 'toggle';
 
 export interface QAItem {
   id: string;
@@ -70,12 +82,16 @@ export interface Block {
   id: string;
   type: BlockType;
   content: string;
-  checked?: boolean;
+  checked?: boolean;    // todo blokları için
+  collapsed?: boolean;  // toggle blokları için
+  lang?: string;        // code blokları için dil etiketi
 }
 
 export interface Note {
   id: string;
   title: string;
+  icon?: string;        // emoji simge
+  cover?: string;       // kapak rengi (CSS renk değeri)
   blocks: Block[];
   createdAt: string;
   updatedAt: string;
