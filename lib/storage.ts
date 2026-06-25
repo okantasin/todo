@@ -16,37 +16,6 @@ export function formatDate(iso: string): string {
   return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export function useLocalStorage<T>(key: string, initial: T): [T, (val: T | ((prev: T) => T)) => void, boolean] {
-  const [value, setValue] = useState<T>(initial);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw !== null) {
-        setValue(JSON.parse(raw));
-      }
-    } catch {
-      // ignore
-    }
-    setLoaded(true);
-  }, [key]);
-
-  const set = useCallback((val: T | ((prev: T) => T)) => {
-    setValue(prev => {
-      const next = typeof val === 'function' ? (val as (p: T) => T)(prev) : val;
-      try {
-        localStorage.setItem(key, JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  }, [key]);
-
-  return [value, set, loaded];
-}
-
 const INITIAL_DATA: AppData = {
   tasks: [],
   projects: [],
@@ -77,17 +46,32 @@ export function useAppData() {
     return () => { cancelled = true; };
   }, []);
 
+  function putData(next: AppData) {
+    return fetch('/api/data', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(next),
+    });
+  }
+
   const persist = useCallback((next: AppData) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      fetch('/api/data', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(next),
-      }).catch(() => {
+      putData(next).catch(() => {
         // yazma hatası sessizce yutuluyor; bir sonraki değişiklikte tekrar denenecek
       });
     }, 400);
+  }, []);
+
+  // Debounce'u atlayıp veriyi HEMEN kaydeder ve promise döner.
+  // Yönlendirmeden (örn. yeni not açma) önce kaybı önlemek için kullanılır.
+  const saveNow = useCallback(async (next: AppData) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    try {
+      await putData(next);
+    } catch {
+      // sessiz
+    }
   }, []);
 
   const setData = useCallback((val: AppData | ((prev: AppData) => AppData)) => {
@@ -105,5 +89,5 @@ export function useAppData() {
     }));
   }, [setData]);
 
-  return { data, setData, updateData, loaded };
+  return { data, setData, updateData, saveNow, loaded };
 }

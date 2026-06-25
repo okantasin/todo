@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAppData, genId } from '@/lib/storage';
 import type { Note } from '@/lib/types';
 
 export default function NotesPage() {
-  const { data, updateData, loaded } = useAppData();
+  const { data, updateData, saveNow, loaded } = useAppData();
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
@@ -25,7 +27,7 @@ export default function NotesPage() {
     return matchesSearch && matchesTag;
   });
 
-  function createNote() {
+  async function createNote() {
     const note: Note = {
       id: genId(),
       title: 'Yeni Not',
@@ -34,9 +36,11 @@ export default function NotesPage() {
       updatedAt: new Date().toISOString(),
       tags: [],
     };
+    const nextData = { ...data, notes: [note, ...data.notes] };
     updateData('notes', prev => [note, ...prev]);
-    // Navigate to note
-    window.location.href = `/notes/${note.id}`;
+    // Yönlendirmeden önce HEMEN kaydet, yoksa debounce'lu kayıt sayfa değişince iptal olur.
+    await saveNow(nextData);
+    router.push(`/notes/${note.id}`);
   }
 
   function deleteNote(id: string, e: React.MouseEvent) {
