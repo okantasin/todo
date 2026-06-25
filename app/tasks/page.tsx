@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useAppData, genId, today, formatDate } from '@/lib/storage';
-import type { Task, Priority, QAItem } from '@/lib/types';
+import type { Task, Priority, QAItem, ChecklistItem, TaskLink } from '@/lib/types';
 
 function useAutoGrow(value: string) {
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -33,8 +33,21 @@ const PRIORITY_LABELS: Record<Priority, string> = {
 const STATUS_LABELS: Record<Task['status'], string> = {
   todo: 'Bekliyor',
   'in-progress': 'Devam',
+  'in-review': 'İncelemede',
+  blocked: 'Engelli',
   done: 'Tamamlandı',
 };
+
+const STATUS_COLORS: Record<Task['status'], string> = {
+  todo: '#6b665d',
+  'in-progress': '#b8956a',
+  'in-review': '#9b59b6',
+  blocked: '#c0392b',
+  done: '#27ae60',
+};
+
+// Hızlı tıklama akışı (Engelli hariç; o sadece dropdown'dan seçilir)
+const STATUS_CYCLE: Task['status'][] = ['todo', 'in-progress', 'in-review', 'done'];
 
 function PriorityDot({ priority }: { priority: Priority }) {
   return (
@@ -111,6 +124,67 @@ function TextArea({ value, onChange, placeholder, mono, rows = 2 }: { value: str
 function AutoTextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { value: string }) {
   const ref = useAutoGrow(props.value);
   return <textarea ref={ref} {...props} style={{ ...props.style, resize: 'none', overflow: 'hidden' }} />;
+}
+
+function Checklist({ items, onChange }: { items: ChecklistItem[]; onChange: (items: ChecklistItem[]) => void }) {
+  const [text, setText] = useState('');
+  function add() {
+    if (!text.trim()) return;
+    onChange([...items, { id: genId(), text: text.trim(), done: false }]);
+    setText('');
+  }
+  const doneCount = items.filter(i => i.done).length;
+  return (
+    <div>
+      {items.length > 0 && (
+        <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>{doneCount}/{items.length} tamamlandı</div>
+      )}
+      {items.map(item => (
+        <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <input type="checkbox" checked={item.done} onChange={e => onChange(items.map(i => i.id === item.id ? { ...i, done: e.target.checked } : i))} style={{ accentColor: 'var(--accent)', cursor: 'pointer' }} />
+          <span style={{ fontSize: 13, textDecoration: item.done ? 'line-through' : 'none', color: item.done ? 'var(--muted)' : 'var(--dark)', flex: 1 }}>{item.text}</span>
+          <button onClick={() => onChange(items.filter(i => i.id !== item.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 12, opacity: 0.5 }}>×</button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+        <input
+          placeholder="Yeni kriter..."
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && add()}
+          style={{ flex: 1, padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, background: 'var(--bg)', color: 'var(--dark)' }}
+        />
+        <button onClick={add} style={{ padding: '5px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>+</button>
+      </div>
+    </div>
+  );
+}
+
+function References({ items, onChange }: { items: TaskLink[]; onChange: (items: TaskLink[]) => void }) {
+  const [form, setForm] = useState({ label: '', url: '' });
+  function add() {
+    if (!form.url.trim()) return;
+    onChange([...items, { id: genId(), label: form.label.trim() || form.url.trim(), url: form.url.trim() }]);
+    setForm({ label: '', url: '' });
+  }
+  const safe = (u: string) => (/^(https?:|mailto:)/i.test(u) ? u : `https://${u}`);
+  return (
+    <div>
+      {items.length === 0 && <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>Henüz bağlantı yok.</p>}
+      {items.map(item => (
+        <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ color: 'var(--accent)' }}>🔗</span>
+          <a href={safe(item.url)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'underline', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</a>
+          <button onClick={() => onChange(items.filter(i => i.id !== item.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 12, opacity: 0.5 }}>×</button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+        <input placeholder="Etiket" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} style={{ width: 110, padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, background: 'var(--bg)', color: 'var(--dark)' }} />
+        <input placeholder="https://..." value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} onKeyDown={e => e.key === 'Enter' && add()} style={{ flex: 1, padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, background: 'var(--bg)', color: 'var(--dark)' }} />
+        <button onClick={add} style={{ padding: '5px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>+</button>
+      </div>
+    </div>
+  );
 }
 
 function ProblemSolutions({ items, onChange }: { items: QAItem[]; onChange: (items: QAItem[]) => void }) {
@@ -215,14 +289,36 @@ function TaskDetail({ task, projectTitle, onUpdate, onClose }: {
           onChange={e => set('dueDate', e.target.value || undefined)}
           style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, background: 'var(--bg)', color: 'var(--dark)' }}
         />
+        <input
+          value={task.estimate ?? ''}
+          onChange={e => set('estimate', e.target.value || undefined)}
+          placeholder="Tahmin (2h)"
+          style={{ width: 90, padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, background: 'var(--bg)', color: 'var(--dark)' }}
+        />
+        <input
+          value={task.timeSpent ?? ''}
+          onChange={e => set('timeSpent', e.target.value || undefined)}
+          placeholder="Harcanan"
+          style={{ width: 90, padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, background: 'var(--bg)', color: 'var(--dark)' }}
+        />
         {projectTitle && (
           <span style={{ fontSize: 11, color: 'var(--muted)', background: 'var(--border)', padding: '4px 10px', borderRadius: 10 }}>{projectTitle}</span>
         )}
       </div>
 
+      {task.updatedAt && (
+        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: -20, marginBottom: 24 }}>
+          Son güncelleme: {new Date(task.updatedAt).toLocaleString('tr-TR')}
+        </div>
+      )}
+
       {/* Description */}
       <Section title="Açıklama">
         <TextArea value={task.description ?? ''} onChange={v => set('description', v || undefined)} placeholder="Görevin kısa açıklaması..." rows={2} />
+      </Section>
+
+      <Section title="Acceptance Criteria">
+        <Checklist items={task.acceptanceCriteria ?? []} onChange={items => set('acceptanceCriteria', items)} />
       </Section>
 
       <Section title="Design Decision">
@@ -253,6 +349,10 @@ function TaskDetail({ task, projectTitle, onUpdate, onClose }: {
         <TextArea value={task.codeReview ?? ''} onChange={v => set('codeReview', v)} placeholder="PR linki, review yorumları, talep edilen değişiklikler..." mono />
       </Section>
 
+      <Section title="References / Links">
+        <References items={task.references ?? []} onChange={items => set('references', items)} />
+      </Section>
+
       <Section title="Notes">
         <TextArea value={task.taskNotes ?? ''} onChange={v => set('taskNotes', v)} placeholder="Serbest notlar..." />
       </Section>
@@ -272,12 +372,14 @@ function detailCount(task: Task): number {
   if ((task.problemSolutions ?? []).length) n++;
   if (task.codeReview?.trim()) n++;
   if (task.taskNotes?.trim()) n++;
+  if ((task.acceptanceCriteria ?? []).length) n++;
+  if ((task.references ?? []).length) n++;
   return n;
 }
 
 export default function TasksPage() {
   const { data, updateData, loaded } = useAppData();
-  const [filter, setFilter] = useState<'all' | 'todo' | 'in-progress' | 'done'>('all');
+  const [filter, setFilter] = useState<'all' | Task['status']>('all');
   const [showForm, setShowForm] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -295,7 +397,8 @@ export default function TasksPage() {
   const selectedTask = data.tasks.find(t => t.id === selectedId);
 
   function updateTask(task: Task) {
-    updateData('tasks', prev => prev.map(t => t.id === task.id ? task : t));
+    const stamped = { ...task, updatedAt: new Date().toISOString() };
+    updateData('tasks', prev => prev.map(t => t.id === task.id ? stamped : t));
   }
 
   if (selectedTask) {
@@ -313,9 +416,12 @@ export default function TasksPage() {
   }
 
   const tasks = data.tasks.filter(t => filter === 'all' ? true : t.status === filter);
-  const todo = data.tasks.filter(t => t.status === 'todo').length;
-  const inProgress = data.tasks.filter(t => t.status === 'in-progress').length;
-  const done = data.tasks.filter(t => t.status === 'done').length;
+  const countByStatus = (s: Task['status']) => data.tasks.filter(t => t.status === s).length;
+  const todo = countByStatus('todo');
+  const inProgress = countByStatus('in-progress');
+  const inReview = countByStatus('in-review');
+  const blocked = countByStatus('blocked');
+  const done = countByStatus('done');
 
   function addTask() {
     if (!form.title.trim()) return;
@@ -328,8 +434,11 @@ export default function TasksPage() {
       projectId: form.projectId || undefined,
       dueDate: form.dueDate || undefined,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       tags: [],
       problemSolutions: [],
+      acceptanceCriteria: [],
+      references: [],
     };
     updateData('tasks', prev => [task, ...prev]);
     setForm({ title: '', description: '', priority: 'medium', dueDate: '', projectId: '' });
@@ -337,8 +446,10 @@ export default function TasksPage() {
   }
 
   function toggleStatus(task: Task) {
-    const next: Task['status'] = task.status === 'todo' ? 'in-progress' : task.status === 'in-progress' ? 'done' : 'todo';
-    updateData('tasks', prev => prev.map(t => t.id === task.id ? { ...t, status: next, completedAt: next === 'done' ? new Date().toISOString() : undefined } : t));
+    // Engelli durumundan tıklayınca akışın başına dön; diğerleri sırayla ilerler
+    const curIdx = STATUS_CYCLE.indexOf(task.status);
+    const next: Task['status'] = curIdx === -1 ? 'todo' : STATUS_CYCLE[(curIdx + 1) % STATUS_CYCLE.length];
+    updateData('tasks', prev => prev.map(t => t.id === task.id ? { ...t, status: next, updatedAt: new Date().toISOString(), completedAt: next === 'done' ? new Date().toISOString() : undefined } : t));
   }
 
   function deleteTask(id: string) {
@@ -371,7 +482,7 @@ export default function TasksPage() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.03em', margin: 0 }}>Görevler</h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--muted)' }}>
-            {todo} bekliyor &middot; {inProgress} devam ediyor &middot; {done} tamamlandı
+            {todo} bekliyor &middot; {inProgress} devam &middot; {inReview} incelemede{blocked > 0 ? ` · ${blocked} engelli` : ''} &middot; {done} tamamlandı
           </p>
         </div>
         <button
@@ -501,10 +612,12 @@ export default function TasksPage() {
       )}
 
       {/* Filter tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, padding: '4px', background: 'var(--surface)', borderRadius: 24, border: '1px solid var(--border)', width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, padding: '4px', background: 'var(--surface)', borderRadius: 24, border: '1px solid var(--border)', width: 'fit-content', flexWrap: 'wrap' }}>
         {filterTab('Tümü', 'all', data.tasks.length)}
         {filterTab('Bekliyor', 'todo', todo)}
         {filterTab('Devam', 'in-progress', inProgress)}
+        {filterTab('İncelemede', 'in-review', inReview)}
+        {filterTab('Engelli', 'blocked', blocked)}
         {filterTab('Tamamlandı', 'done', done)}
       </div>
 
@@ -541,13 +654,13 @@ export default function TasksPage() {
               {/* Status toggle */}
               <button
                 onClick={e => { e.stopPropagation(); toggleStatus(task); }}
-                title={task.status}
+                title={STATUS_LABELS[task.status]}
                 style={{
                   width: 18,
                   height: 18,
-                  borderRadius: task.status === 'done' ? '50%' : task.status === 'in-progress' ? 4 : '50%',
-                  border: `2px solid ${task.status === 'done' ? 'var(--accent)' : task.status === 'in-progress' ? 'var(--accent-light)' : 'var(--border)'}`,
-                  background: task.status === 'done' ? 'var(--accent)' : task.status === 'in-progress' ? 'rgba(154,123,79,0.2)' : 'transparent',
+                  borderRadius: task.status === 'blocked' || task.status === 'in-progress' ? 4 : '50%',
+                  border: `2px solid ${task.status === 'todo' ? 'var(--border)' : STATUS_COLORS[task.status]}`,
+                  background: task.status === 'done' ? STATUS_COLORS.done : task.status === 'todo' ? 'transparent' : `${STATUS_COLORS[task.status]}33`,
                   cursor: 'pointer',
                   flexShrink: 0,
                   marginTop: 2,
@@ -560,6 +673,9 @@ export default function TasksPage() {
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
+                )}
+                {task.status === 'blocked' && (
+                  <span style={{ color: STATUS_COLORS.blocked, fontSize: 11, fontWeight: 700, lineHeight: 1 }}>!</span>
                 )}
               </button>
 
@@ -575,6 +691,11 @@ export default function TasksPage() {
                   }}>
                     {task.title}
                   </span>
+                  {(task.status === 'in-progress' || task.status === 'in-review' || task.status === 'blocked') && (
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: STATUS_COLORS[task.status], border: `1px solid ${STATUS_COLORS[task.status]}`, padding: '1px 6px', borderRadius: 10 }}>
+                      {STATUS_LABELS[task.status]}
+                    </span>
+                  )}
                   {project && (
                     <span style={{ fontSize: 11, color: 'var(--muted)', background: 'var(--border)', padding: '2px 7px', borderRadius: 10 }}>
                       {project.title}

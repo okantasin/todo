@@ -105,6 +105,8 @@ function toTaskRow(t: Task) {
     ...t,
     tags: t.tags ?? [],
     problemSolutions: t.problemSolutions ?? [],
+    acceptanceCriteria: t.acceptanceCriteria ?? [],
+    references: t.references ?? [],
   };
 }
 

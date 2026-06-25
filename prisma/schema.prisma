@@ -15,12 +15,17 @@ model Task {
   title            String
   description      String?
   priority         String
-  status           String
-  projectId        String?
-  dueDate          String?
-  createdAt        String
-  completedAt      String?
-  tags             Json    @default("[]")
+  status             String
+  projectId          String?
+  dueDate            String?
+  createdAt          String
+  updatedAt          String?
+  completedAt        String?
+  tags               Json    @default("[]")
+  estimate           String?
+  timeSpent          String?
+  acceptanceCriteria Json    @default("[]")
+  references         Json    @default("[]")
   designDecision   String?
   backendDev       String?
   frontendDev      String?

@@ -1,5 +1,11 @@
 export type Priority = 'low' | 'medium' | 'high' | 'urgent';
-export type TaskStatus = 'todo' | 'in-progress' | 'done';
+export type TaskStatus = 'todo' | 'in-progress' | 'in-review' | 'blocked' | 'done';
+
+export interface TaskLink {
+  id: string;
+  label: string;
+  url: string;
+}
 export type BlockType =
   | 'paragraph'
   | 'heading1'
@@ -29,8 +35,13 @@ export interface Task {
   projectId?: string;
   dueDate?: string;
   createdAt: string;
+  updatedAt?: string;
   completedAt?: string;
   tags: string[];
+  estimate?: string;            // tahmini efor (serbest metin: "2h", "3d")
+  timeSpent?: string;           // harcanan süre
+  acceptanceCriteria?: ChecklistItem[];
+  references?: TaskLink[];      // PR / issue / döküman linkleri
   // Detail fields (notion-like per-task document)
   designDecision?: string;
   backendDev?: string;
